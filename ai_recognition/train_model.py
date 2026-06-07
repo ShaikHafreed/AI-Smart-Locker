@@ -43,6 +43,6 @@ if len(face_samples) == 0:
 recognizer.train(face_samples, np.array(ids))
 
 # Save model
-recognizer.save("face_recognition/owner_model.yml")
+recognizer.save("ai_recognition/owner_model.yml")
 
 print("✅ Face Recognition Model Trained Successfully!")

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'api_service.dart';
+import 'images_screen.dart';
 
 void main() {
   runApp(const SmartLockerApp());
@@ -16,19 +18,54 @@ class SmartLockerApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: DashboardScreen(),
+      home: const DashboardScreen(),
     );
   }
 }
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
+  @override
+  State<DashboardScreen> createState() =>
+      _DashboardScreenState();
+}
+
+class _DashboardScreenState
+    extends State<DashboardScreen> {
+
+  Map<String, dynamic>? data;
+
+  @override
+  void initState() {
+    super.initState();
+
+    loadData();
+
+    Timer.periodic(
+      const Duration(seconds: 3),
+      (timer) {
+        loadData();
+      },
+    );
+  }
+
+  Future<void> loadData() async {
+
+    var result =
+        await ApiService.getStatus();
+
+    setState(() {
+      data = result;
+    });
+  }
+
   Widget statusCard(
-      IconData icon,
-      Color color,
-      String title,
-      String value) {
+    IconData icon,
+    Color color,
+    String title,
+    String value,
+  ) {
     return Card(
       elevation: 5,
       child: ListTile(
@@ -55,68 +92,73 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    if (data == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("AI Smart Locker"),
+        title: const Text(
+          "AI Smart Locker",
+        ),
         centerTitle: true,
       ),
-      body: FutureBuilder(
-        future: ApiService.getStatus(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
 
-          var data =
-              snapshot.data as Map<String, dynamic>;
-
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-
-                statusCard(
-                  Icons.lock,
-                  Colors.green,
-                  "Locker Status",
-                  data["locker"],
-                ),
-
-                statusCard(
-                  Icons.door_front_door,
-                  Colors.orange,
-                  "Door Status",
-                  data["door"],
-                ),
-
-                statusCard(
-                  Icons.face,
-                  Colors.green,
-                  "Owner Status",
-                  data["owner"],
-                ),
-
-                statusCard(
-                  Icons.warning,
-                  Colors.red,
-                  "Latest Alert",
-                  data["alert"],
-                ),
-
-                const SizedBox(height: 20),
-
-                ElevatedButton(
-                  onPressed: () {},
-                  child: const Text(
-                    "VIEW CAPTURED IMAGES",
-                  ),
-                ),
-              ],
+            statusCard(
+              Icons.lock,
+              Colors.green,
+              "Locker Status",
+              data!["locker"],
             ),
-          );
-        },
+
+            statusCard(
+              Icons.door_front_door,
+              Colors.orange,
+              "Door Status",
+              data!["door"],
+            ),
+
+            statusCard(
+              Icons.face,
+              Colors.green,
+              "Owner Status",
+              data!["owner"],
+            ),
+
+            statusCard(
+              Icons.warning,
+              Colors.red,
+              "Latest Alert",
+              data!["alert"],
+            ),
+
+            const SizedBox(height: 20),
+
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const ImagesScreen(),
+                  ),
+                );
+              },
+              child: const Text(
+                "VIEW CAPTURED IMAGES",
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

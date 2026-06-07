@@ -3,21 +3,25 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
 
+  static String baseUrl =
+      "http://192.168.31.229:5000";
+
   static Future<Map<String, dynamic>> getStatus() async {
 
-    print("REQUESTING FLASK...");
-
-    final response = await http.get(
-      Uri.parse(
-        "http://192.168.31.229:5000/status",
-      ),
+    final response =
+        await http.get(
+      Uri.parse("$baseUrl/status"),
     );
 
-    print("STATUS CODE:");
-    print(response.statusCode);
+    return jsonDecode(response.body);
+  }
 
-    print("RESPONSE:");
-    print(response.body);
+  static Future<List<dynamic>> getImages() async {
+
+    final response =
+        await http.get(
+      Uri.parse("$baseUrl/images"),
+    );
 
     return jsonDecode(response.body);
   }

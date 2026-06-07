@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from recognize_uploaded import recognize_person
+
 from datetime import datetime
 import os
 
@@ -7,30 +9,31 @@ app = Flask(__name__)
 CORS(app)
 
 UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+os.makedirs(
+    UPLOAD_FOLDER,
+    exist_ok=True
+)
+
+locker_status = {
+    "locker": "ONLINE",
+    "door": "CLOSED",
+    "owner": "UNKNOWN",
+    "alert": "NO ALERT"
+}
 
 
-# -------------------------
-# Locker Status API
-# -------------------------
-@app.route('/test')
+@app.route("/test")
 def test():
     return "TEST WORKING"
 
-@app.route('/status')
+
+@app.route("/status")
 def status():
 
-    return jsonify({
-        "locker": "ONLINE",
-        "door": "CLOSED",
-        "owner": "VERIFIED",
-        "alert": "NO INTRUDER DETECTED"
-    })
+    return jsonify(locker_status)
 
 
-# -------------------------
-# ESP32 Upload API
-# -------------------------
 @app.route('/upload', methods=['POST'])
 def upload():
 
@@ -54,13 +57,25 @@ def upload():
 
     print("IMAGE SAVED:", filepath)
 
+    result = recognize_person(filepath)
+
+    print("RECOGNITION:", result)
+
+    locker_status["door"] = "OPEN"
+
+    if result == "OWNER":
+
+        locker_status["owner"] = "VERIFIED"
+        locker_status["alert"] = "NO INTRUDER DETECTED"
+
+    else:
+
+        locker_status["owner"] = "UNKNOWN"
+        locker_status["alert"] = "INTRUDER DETECTED"
+
     return "SUCCESS", 200
 
-
-# -------------------------
-# Get All Images
-# -------------------------
-@app.route('/images')
+@app.route("/images")
 def images():
 
     files = os.listdir(UPLOAD_FOLDER)
@@ -76,10 +91,7 @@ def images():
     return jsonify(image_urls)
 
 
-# -------------------------
-# Serve Single Image
-# -------------------------
-@app.route('/image/<filename>')
+@app.route("/image/<filename>")
 def image(filename):
 
     return send_from_directory(

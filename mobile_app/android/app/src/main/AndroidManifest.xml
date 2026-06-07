@@ -3,6 +3,8 @@
         android:label="mobile_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <application
+    android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
