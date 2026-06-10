@@ -32,19 +32,32 @@ def recognize_person(image_path):
 
     faces = face_detector.detectMultiScale(
         gray,
-        1.2,
-        5
+        scaleFactor=1.1,
+        minNeighbors=4,
+        minSize=(50, 50)
     )
+
+    print("Faces Found:", len(faces))
 
     for (x, y, w, h) in faces:
 
         face = gray[y:y+h, x:x+w]
 
-        _, confidence = recognizer.predict(face)
+        try:
+            face = cv2.resize(
+                face,
+                (200, 200)
+            )
+        except:
+            continue
+
+        label, confidence = recognizer.predict(face)
 
         print("Confidence:", confidence)
 
-        if confidence < 60:
+        # Lower confidence = better match
+
+        if confidence < 100:
             return "OWNER"
 
         return "INTRUDER"
