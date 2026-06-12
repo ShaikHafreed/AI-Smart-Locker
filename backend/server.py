@@ -125,7 +125,11 @@ def send_telegram_photo(
 @app.route("/test")
 def test():
 
-    return "TEST WORKING"
+    send_telegram_alert(
+        "TEST MESSAGE FROM AI LOCKER"
+    )
+
+    return "TEST SENT"
 
 # ==========================================
 # STATUS
@@ -134,9 +138,51 @@ def test():
 @app.route("/status")
 def status():
 
-    return jsonify(
-        locker_status
+    total_logs = len(
+        access_logs
     )
+
+    intruder_count = len([
+        log
+        for log in access_logs
+        if log["result"] != "OWNER"
+    ])
+
+    last_result = (
+        access_logs[0]["result"]
+        if len(access_logs) > 0
+        else "NONE"
+    )
+
+    return jsonify({
+
+        "locker":
+            locker_status["locker"],
+
+        "door":
+            locker_status["door"],
+
+        "owner":
+            locker_status["owner"],
+
+        "alert":
+            locker_status["alert"],
+
+        "time":
+            locker_status["time"],
+
+        "total_logs":
+            total_logs,
+
+        "intruders":
+            intruder_count,
+
+        "pending":
+            pending_access["status"],
+
+        "last_result":
+            last_result
+    })
 
 # ==========================================
 # PENDING ACCESS
@@ -158,6 +204,16 @@ def approve():
 
     pending_access["status"] = "APPROVED"
 
+    current_time = datetime.now().strftime(
+        "%d-%m-%Y %H:%M:%S"
+    )
+
+    send_telegram_alert(
+        f"✅ ACCESS APPROVED\n\n"
+        f"Time: {current_time}\n"
+        f"Visitor Approved By Owner"
+    )
+
     return jsonify({
         "message": "APPROVED"
     })
@@ -170,6 +226,16 @@ def approve():
 def reject():
 
     pending_access["status"] = "REJECTED"
+
+    current_time = datetime.now().strftime(
+        "%d-%m-%Y %H:%M:%S"
+    )
+
+    send_telegram_alert(
+        f"❌ ACCESS REJECTED\n\n"
+        f"Time: {current_time}\n"
+        f"Visitor Rejected By Owner"
+    )
 
     return jsonify({
         "message": "REJECTED"
@@ -399,3 +465,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000
     )
+    

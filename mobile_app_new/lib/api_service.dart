@@ -3,8 +3,8 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
 
-  static String baseUrl =
-      "http://192.168.31.229:5000";
+  static const String baseUrl =
+    "http://192.168.31.172:5000";
 
   // =========================
   // LOCKER STATUS
@@ -64,8 +64,10 @@ class ApiService {
   // PENDING ACCESS
   // =========================
 
-  static Future<Map<String, dynamic>>
-      getPendingAccess() async {
+static Future<Map<String, dynamic>>
+    getPendingAccess() async {
+
+  try {
 
     final response = await http.get(
       Uri.parse(
@@ -73,10 +75,27 @@ class ApiService {
       ),
     );
 
+    print(
+      "PENDING ACCESS => ${response.body}",
+    );
+
     return jsonDecode(
       response.body,
     );
+
+  } catch (e) {
+
+    print(
+      "ERROR => $e",
+    );
+
+    return {
+      "status": "ERROR",
+      "result": e.toString(),
+      "image": ""
+    };
   }
+}
 
   // =========================
   // APPROVE ACCESS

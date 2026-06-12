@@ -15,34 +15,48 @@ class _ApprovalScreenState
 
   Map<String, dynamic>? data;
 
+  Timer? timer;
+
   @override
   void initState() {
     super.initState();
 
     loadData();
 
-    Timer.periodic(
+    timer = Timer.periodic(
       const Duration(seconds: 3),
-      (timer) {
-        loadData();
-      },
+      (_) => loadData(),
     );
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
   }
 
   Future<void> loadData() async {
 
-    var result =
-        await ApiService.getPendingAccess();
+    try {
 
-    setState(() {
-      data = result;
-    });
+      var result =
+          await ApiService.getPendingAccess();
+
+      setState(() {
+        data = result;
+      });
+
+    } catch (e) {
+
+      print(e);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
 
     if (data == null) {
+
       return const Scaffold(
         body: Center(
           child:
@@ -53,13 +67,14 @@ class _ApprovalScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          "Access Approval",
-        ),
+        title:
+            const Text("Approval Requests"),
       ),
+
       body: Padding(
         padding:
             const EdgeInsets.all(16),
+
         child: Column(
           children: [
 
@@ -67,7 +82,7 @@ class _ApprovalScreenState
               "Status: ${data!["status"]}",
               style:
                   const TextStyle(
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight:
                     FontWeight.bold,
               ),
@@ -89,6 +104,21 @@ class _ApprovalScreenState
               height: 10,
             ),
 
+            if (data!["similarity"] != null)
+              Text(
+                "Similarity: ${data!["similarity"]}%",
+                style: const TextStyle(
+                  fontSize: 18,
+                  color: Colors.red,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+
+            const SizedBox(
+              height: 10,
+            ),
+
             Text(
               "Time: ${data!["time"]}",
             ),
@@ -97,11 +127,29 @@ class _ApprovalScreenState
               height: 20,
             ),
 
-            if (data!["image"] != "")
+            if (data!["image"] != null &&
+                data!["image"] != "")
+
               Expanded(
                 child: Image.network(
-                  data!["image"],
+                  data!["image"]
+                      .toString(),
+
                   fit: BoxFit.contain,
+
+                  errorBuilder:
+                      (
+                    context,
+                    error,
+                    stackTrace,
+                  ) {
+
+                    return const Center(
+                      child: Text(
+                        "Image Not Available",
+                      ),
+                    );
+                  },
                 ),
               ),
 
@@ -133,6 +181,7 @@ class _ApprovalScreenState
 
                       loadData();
                     },
+
                     child: const Text(
                       "APPROVE",
                     ),
@@ -164,6 +213,7 @@ class _ApprovalScreenState
 
                       loadData();
                     },
+
                     child: const Text(
                       "REJECT",
                     ),

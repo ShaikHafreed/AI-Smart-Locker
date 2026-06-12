@@ -1,43 +1,67 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../api_service.dart';
 
 import 'capture_face_screen.dart';
 import 'gallery_screen.dart';
-import 'approval_screen.dart';
+import 'approval_request_screen.dart';
 import 'logs_screen.dart';
+import 'verify_face_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() =>
-      _DashboardScreenState();
+  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState
-    extends State<DashboardScreen> {
-
+class _DashboardScreenState extends State<DashboardScreen> {
   int selectedIndex = 0;
 
-  Widget statusCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Map<String, dynamic>? statusData;
+
+  Timer? timer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    loadStatus();
+
+    timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      loadStatus();
+    });
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> loadStatus() async {
+    try {
+      final result = await ApiService.getStatus();
+
+      setState(() {
+        statusData = result;
+      });
+    } catch (e) {
+      print(e);
+    }
+  }
+
+  Widget statusCard(String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 4,
       child: ListTile(
-        leading: Icon(
-          icon,
-          color: color,
-          size: 35,
-        ),
+        leading: Icon(icon, color: color, size: 35),
         title: Text(title),
         subtitle: Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
     );
@@ -53,28 +77,16 @@ class _DashboardScreenState
       elevation: 5,
       child: InkWell(
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => page,
-            ),
-          );
+          Navigator.push(context, MaterialPageRoute(builder: (_) => page));
         },
         child: Column(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 40,
-            ),
-            const SizedBox(
-              height: 10,
-            ),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-            ),
+            Icon(icon, size: 40),
+
+            const SizedBox(height: 10),
+
+            Text(title, textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -82,188 +94,123 @@ class _DashboardScreenState
   }
 
   @override
-  Widget build(
-      BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title:
-            const Text("AI Smart Locker"),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text("AI Smart Locker"), centerTitle: true),
 
-      body: SingleChildScrollView(
-        child: Padding(
-          padding:
-              const EdgeInsets.all(12),
-          child: Column(
-            children: [
+      body: statusData == null
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
 
-              statusCard(
-                "Locker Status",
-                "Locked",
-                Icons.lock,
-                Colors.green,
-              ),
-
-              statusCard(
-                "Owner Status",
-                "Verified",
-                Icons.verified_user,
-                Colors.blue,
-              ),
-
-              statusCard(
-                "Last Access",
-                "Today 5:30 PM",
-                Icons.access_time,
-                Colors.orange,
-              ),
-
-              const SizedBox(
-                height: 20,
-              ),
-
-              GridView.count(
-                shrinkWrap: true,
-                physics:
-                    const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                children: [
-
-                  dashboardButton(
-                    context,
-                    Icons.face,
-                    "Capture Face",
-                    const CaptureFaceScreen(),
-                  ),
-
-                  dashboardButton(
-                    context,
-                    Icons.photo_library,
-                    "Gallery Images",
-                    const GalleryScreen(),
-                  ),
-
-                  dashboardButton(
-                    context,
-                    Icons.approval,
-                    "Approval Requests",
-                    const ApprovalScreen(),
-                  ),
-
-                  dashboardButton(
-                    context,
-                    Icons.lock_open,
-                    "Open Locker",
-                    const LogsScreen(),
-                  ),
-
-                  Card(
-                    elevation: 5,
-                    child: InkWell(
-                      onTap: () {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              "Notifications Coming Soon",
-                            ),
-                          ),
-                        );
-                      },
-                      child: const Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.notifications,
-                            size: 40,
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            "Notifications",
-                          ),
-                        ],
-                      ),
+                child: Column(
+                  children: [
+                    statusCard(
+                      "Locker Status",
+                      statusData!["locker"].toString(),
+                      Icons.lock,
+                      Colors.green,
                     ),
-                  ),
 
-                  Card(
-                    elevation: 5,
-                    child: InkWell(
-                      onTap: () {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              "Settings Coming Soon",
-                            ),
-                          ),
-                        );
-                      },
-                      child: const Column(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.settings,
-                            size: 40,
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            "Settings",
-                          ),
-                        ],
-                      ),
+                    statusCard(
+                      "Pending Request",
+                      statusData!["pending"].toString(),
+                      Icons.approval,
+                      Colors.orange,
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
 
-      bottomNavigationBar:
-          BottomNavigationBar(
-        currentIndex:
-            selectedIndex,
+                    statusCard(
+                      "Last Event",
+                      statusData!["last_event"].toString(),
+                      Icons.history,
+                      Colors.blue,
+                    ),
+
+                    statusCard(
+                      "Total Logs",
+                      statusData!["total_logs"].toString(),
+                      Icons.list,
+                      Colors.purple,
+                    ),
+
+                    statusCard(
+                      "Intruder Count",
+                      statusData!["intruder_count"].toString(),
+                      Icons.warning,
+                      Colors.red,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    GridView.count(
+                      shrinkWrap: true,
+
+                      physics: const NeverScrollableScrollPhysics(),
+
+                      crossAxisCount: 2,
+
+                      crossAxisSpacing: 12,
+
+                      mainAxisSpacing: 12,
+
+                      children: [
+                        dashboardButton(
+                          context,
+                          Icons.face,
+                          "Capture Face",
+                          const CaptureFaceScreen(),
+                        ),
+
+                        dashboardButton(
+                          context,
+                          Icons.photo_library,
+                          "Gallery Images",
+                          const GalleryScreen(),
+                        ),
+
+                        dashboardButton(
+                          context,
+                          Icons.verified_user,
+                          "Verify Face",
+                          const VerifyFaceScreen(),
+                        ),
+
+                        dashboardButton(
+                          context,
+                          Icons.approval,
+                          "Approval Requests",
+                          const ApprovalRequestScreen(),
+                        ),
+
+                        dashboardButton(
+                          context,
+                          Icons.history,
+                          "Access Logs",
+                          const LogsScreen(),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: selectedIndex,
+
         onTap: (index) {
-
           setState(() {
             selectedIndex = index;
           });
-
-          if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    const LogsScreen(),
-              ),
-            );
-          }
         },
+
         items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
 
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: "Home",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: "Logs"),
 
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: "Logs",
-          ),
-
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Profile",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),
     );
