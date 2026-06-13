@@ -72,7 +72,7 @@ class _VerifyFaceScreenState
           http.MultipartRequest(
         "POST",
         Uri.parse(
-          "http://192.168.31.229:5000/verify",
+          "http://192.168.31.172:5000/verify",
         ),
       );
 

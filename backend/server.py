@@ -360,7 +360,7 @@ def upload():
         pending_access["status"] = "WAITING"
 
         pending_access["image"] = (
-            f"http://192.168.31.229:5000/image/{filename}"
+            f"http://192.168.31.172:5000/image/{filename}"
         )
 
         pending_access["time"] = (
@@ -436,7 +436,7 @@ def images():
     for file in reversed(files):
 
         image_urls.append(
-            f"http://192.168.31.229:5000/image/{file}"
+            f"http://192.168.31.172:5000/image/{file}"
         )
 
     return jsonify(
