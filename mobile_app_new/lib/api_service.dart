@@ -65,4 +65,15 @@ class ApiService {
       }),
     );
   }
+  static Future<List<dynamic>>
+    getImages() async {
+
+  final response = await http.get(
+    Uri.parse("$baseUrl/images"),
+  );
+
+  return jsonDecode(
+    response.body,
+  );
+}
 }

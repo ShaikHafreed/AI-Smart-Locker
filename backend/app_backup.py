@@ -97,9 +97,10 @@ def verify_face():
 
     image.save(
         VISITOR_FACE
-        print("VISITOR SAVED:", VISITOR_FACE)
-        print("FILE EXISTS:", os.path.exists(VISITOR_FACE))
     )
+    print("VISITOR SAVED:", VISITOR_FACE)
+    print("FILE EXISTS:", os.path.exists(VISITOR_FACE))
+    
 
     try:
 
