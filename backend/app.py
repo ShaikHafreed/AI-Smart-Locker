@@ -219,7 +219,7 @@ def send_telegram_message(message):
         requests.post(
             url,
             data={"chat_id": CHAT_ID, "text": message},
-            timeout=10
+            timeout=3
         )
         print("TELEGRAM MESSAGE SENT")
     except Exception as e:
@@ -234,7 +234,7 @@ def send_telegram_photo(image_path, caption=""):
                 url,
                 data={"chat_id": CHAT_ID, "caption": caption},
                 files={"photo": photo},
-                timeout=20
+                timeout=5
             )
         print("TELEGRAM PHOTO SENT")
     except Exception as e:
@@ -502,7 +502,6 @@ def verify_face():
 
         print("VISITOR SAVED:", image_path)
 
-        # permanent image history — every captured visitor image gets logged
         save_visitor_image(filename)
 
         # --------------------------------------------------
@@ -531,6 +530,7 @@ def verify_face():
         # STEP 2 — only now run verification against owners
         # --------------------------------------------------
         best_similarity = 0
+        owner_match_found = False
 
         for owner_image in os.listdir(OWNER_FOLDER):
             owner_path = os.path.join(OWNER_FOLDER, owner_image)
@@ -545,17 +545,21 @@ def verify_face():
                 )
 
                 similarity = round((1 - result["distance"]) * 100, 2)
-                print(owner_image, similarity)
+                print(owner_image, similarity, "verified:", result["verified"])
 
                 if similarity > best_similarity:
                     best_similarity = similarity
+
+                if result["verified"]:
+                    owner_match_found = True
 
             except Exception as face_error:
                 print("FACE ERROR:", face_error)
 
         print("BEST SIMILARITY:", best_similarity)
 
-        if best_similarity >= 92:
+        if owner_match_found:
+
             save_log("Owner Verified", best_similarity, filename)
             send_telegram_message(f"✅ OWNER VERIFIED\n\nSimilarity: {best_similarity}%")
 
@@ -587,8 +591,7 @@ def verify_face():
 
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
-
-# ==========================================
+    # ==========================================
 # MAIN — must stay at the very bottom of the file.
 # Every @app.route(...) above this point WILL register;
 # anything added below app.run() will NOT.
@@ -597,4 +600,4 @@ def verify_face():
 if __name__ == "__main__":
     add_system_event("Server Started")
     print("SERVER READY")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)

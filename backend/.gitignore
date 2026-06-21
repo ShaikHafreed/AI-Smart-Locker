@@ -19,3 +19,25 @@ mobile_app/android/.gradle/
 
 # Face model
 ai_recognition/owner_model.yml
+# Python environments
+backend/venv/
+backend/venv311/
+.venv/
+__pycache__/
+*.pyc
+
+# Sensitive / personal data — never commit these
+backend/firebase_key.json
+backend/locker.db
+backend/uploads/
+backend/owner_faces/
+
+# Flutter / mobile build artifacts
+**/build/
+**/.dart_tool/
+**/android/.gradle/
+**/ios/Pods/
+
+# Editor
+.vscode/
+.idea/
