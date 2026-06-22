@@ -35,8 +35,6 @@ SERVER_IP = "192.168.31.172"
 # ==========================================
 # TELEGRAM
 # ==========================================
-# NOTE: move these into environment variables and rotate the
-# bot token via BotFather, since it's been exposed in plaintext.
 
 BOT_TOKEN = os.environ.get("LOCKER_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("LOCKER_CHAT_ID", "")
@@ -172,7 +170,7 @@ def log_event(result, similarity=0, image_name=""):
     conn.close()
 
 # ==========================================
-# SAVE VISITOR IMAGE RECORD (permanent image history)
+# SAVE VISITOR IMAGE RECORD
 # ==========================================
 
 def save_visitor_image(image_name):
@@ -445,7 +443,7 @@ def reject():
     return jsonify({"success": True})
 
 # ==========================================
-# VISITOR IMAGE (latest, fixed filename)
+# VISITOR IMAGE
 # ==========================================
 
 @app.route("/visitor_image")
@@ -458,7 +456,7 @@ def visitor_image():
     return jsonify({"success": False, "message": "No Visitor Image"})
 
 # ==========================================
-# VIEW STORED IMAGE (by filename, used by /images gallery)
+# VIEW STORED IMAGE
 # ==========================================
 
 @app.route("/image/<filename>")
@@ -505,14 +503,12 @@ def verify_face():
         save_visitor_image(filename)
 
         # --------------------------------------------------
-        # STEP 1 — confirm a real face exists before anything
-        # else runs. retinaface is much stricter than opencv
-        # and avoids false positives on blank/room images.
+        # STEP 1 — confirm a real face exists
         # --------------------------------------------------
         try:
             faces = DeepFace.extract_faces(
                 img_path=image_path,
-                detector_backend="retinaface",
+                detector_backend="mtcnn",
                 enforce_detection=True
             )
 
@@ -521,13 +517,14 @@ def verify_face():
 
         except Exception as detect_error:
             print("NO FACE DETECTED:", detect_error)
-
             save_log("No Face Detected", 0, filename)
-
             return jsonify({"success": False, "message": "No face detected"})
 
         # --------------------------------------------------
-        # STEP 2 — only now run verification against owners
+        # STEP 2 — verify against owner photos.
+        # EARLY EXIT: stops as soon as first match is found
+        # so we never wait for remaining owner photos
+        # unnecessarily — fixes the timeout issue.
         # --------------------------------------------------
         best_similarity = 0
         owner_match_found = False
@@ -540,7 +537,7 @@ def verify_face():
                     img1_path=owner_path,
                     img2_path=image_path,
                     model_name="ArcFace",
-                    detector_backend="retinaface",
+                    detector_backend="mtcnn",
                     enforce_detection=True
                 )
 
@@ -552,6 +549,7 @@ def verify_face():
 
                 if result["verified"]:
                     owner_match_found = True
+                    break   # ← EARLY EXIT — owner found, stop checking
 
             except Exception as face_error:
                 print("FACE ERROR:", face_error)
@@ -559,10 +557,10 @@ def verify_face():
         print("BEST SIMILARITY:", best_similarity)
 
         if owner_match_found:
-
             save_log("Owner Verified", best_similarity, filename)
-            send_telegram_message(f"✅ OWNER VERIFIED\n\nSimilarity: {best_similarity}%")
-
+            send_telegram_message(
+                f"✅ OWNER VERIFIED\n\nSimilarity: {best_similarity}%"
+            )
             return jsonify({
                 "success": True,
                 "verified": True,
@@ -579,7 +577,9 @@ def verify_face():
         }
 
         save_log("Intruder Detected", best_similarity, filename)
-        send_telegram_message(f"🚨 INTRUDER DETECTED\n\nSimilarity: {best_similarity}%")
+        send_telegram_message(
+            f"🚨 INTRUDER DETECTED\n\nSimilarity: {best_similarity}%"
+        )
         send_telegram_photo(image_path, "Approval Required")
 
         return jsonify({
@@ -591,7 +591,42 @@ def verify_face():
 
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
-    # ==========================================
+
+
+# ==========================================
+# EVIDENCE CAPTURE (called by ESP32 after rejection)
+# Saves each photo, logs it, sends to Telegram
+# ==========================================
+
+@app.route("/evidence", methods=["POST"])
+def save_evidence():
+    try:
+        if "image" not in request.files:
+            return jsonify({"success": False, "message": "No Image"})
+
+        image = request.files["image"]
+
+        # Use timestamp + uuid so all 10 photos have unique names
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"evidence_{timestamp}_{uuid.uuid4().hex[:8]}.jpg"
+        image_path = os.path.join(VISITORS_FOLDER, filename)
+
+        image.save(image_path)
+        print("EVIDENCE SAVED:", image_path)
+
+        # Save to DB so it appears in the app gallery
+        save_visitor_image(filename)
+        save_log("Evidence Captured", 0, filename)
+
+        # Send to Telegram (fails silently if network blocked)
+        send_telegram_photo(image_path, "🚨 INTRUDER EVIDENCE PHOTO")
+
+        return jsonify({"success": True, "filename": filename})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+# ==========================================
 # MAIN — must stay at the very bottom of the file.
 # Every @app.route(...) above this point WILL register;
 # anything added below app.run() will NOT.
