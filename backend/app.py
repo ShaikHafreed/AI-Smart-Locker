@@ -153,6 +153,31 @@ conn.close()
 print("DATABASE READY")
 
 # ==========================================
+# LOAD LAST FCM TOKEN FROM DATABASE
+# So Flask does not lose the token on restart
+# ==========================================
+
+def load_latest_fcm_token():
+    global mobile_token
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT token FROM mobile_tokens ORDER BY id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            mobile_token = row["token"]
+            print(f"FCM TOKEN LOADED: {mobile_token[:30]}...")
+        else:
+            print("FCM TOKEN: None saved yet — open the app once to register")
+    except Exception as e:
+        print("FCM TOKEN LOAD ERROR:", e)
+
+load_latest_fcm_token()
+
+# ==========================================
 # LOG EVENT
 # ==========================================
 
@@ -448,12 +473,24 @@ def reject():
 
 @app.route("/visitor_image")
 def visitor_image():
-    image_path = os.path.join(VISITORS_FOLDER, "visitor.jpg")
+    # Return most recently captured visitor image (not evidence)
+    if LATEST_VISITOR_IMAGE and os.path.exists(LATEST_VISITOR_IMAGE):
+        return send_file(LATEST_VISITOR_IMAGE, mimetype="image/jpeg")
 
-    if os.path.exists(image_path):
-        return send_file(image_path, mimetype="image/jpeg")
+    # Fallback: find newest non-evidence jpg
+    try:
+        files = [
+            os.path.join(VISITORS_FOLDER, f)
+            for f in os.listdir(VISITORS_FOLDER)
+            if f.lower().endswith(".jpg") and not f.startswith("evidence_")
+        ]
+        if files:
+            latest = max(files, key=os.path.getmtime)
+            return send_file(latest, mimetype="image/jpeg")
+    except Exception:
+        pass
 
-    return jsonify({"success": False, "message": "No Visitor Image"})
+    return jsonify({"success": False, "message": "No Visitor Image"}), 404
 
 # ==========================================
 # VIEW STORED IMAGE
@@ -469,14 +506,22 @@ def get_image(filename):
 
 @app.route("/images")
 def get_images():
-    files = []
+    if not os.path.exists(VISITORS_FOLDER):
+        return jsonify([])
 
-    if os.path.exists(VISITORS_FOLDER):
-        for file in os.listdir(VISITORS_FOLDER):
-            if file.lower().endswith((".jpg", ".jpeg", ".png")):
-                files.append(f"http://{SERVER_IP}:5000/image/{file}")
+    # Sort by modification time — newest first
+    entries = []
+    for f in os.listdir(VISITORS_FOLDER):
+        if f.lower().endswith((".jpg", ".jpeg", ".png")):
+            full_path = os.path.join(VISITORS_FOLDER, f)
+            entries.append((full_path, os.path.getmtime(full_path)))
 
-    files.reverse()
+    entries.sort(key=lambda x: x[1], reverse=True)
+
+    files = [
+        f"http://{SERVER_IP}:5000/image/{os.path.basename(p)}"
+        for p, _ in entries
+    ]
     return jsonify(files)
 
 # ==========================================
@@ -547,7 +592,9 @@ def verify_face():
                 if similarity > best_similarity:
                     best_similarity = similarity
 
-                if result["verified"]:
+                # Require BOTH DeepFace verified AND similarity >= 50
+                # to prevent false positives on other people
+                if result["verified"] and similarity >= 50:
                     owner_match_found = True
                     break   # ← EARLY EXIT — owner found, stop checking
 
@@ -561,6 +608,16 @@ def verify_face():
             send_telegram_message(
                 f"✅ OWNER VERIFIED\n\nSimilarity: {best_similarity}%"
             )
+            if mobile_token:
+                try:
+                    send_notification(
+                        mobile_token,
+                        "✅ Owner Verified",
+                        f"Welcome! Locker opened by owner. Similarity: {best_similarity}%"
+                    )
+                    print("FCM SENT: Owner Verified notification")
+                except Exception as fcm_err:
+                    print("FCM ERROR:", fcm_err)
             return jsonify({
                 "success": True,
                 "verified": True,
@@ -581,6 +638,16 @@ def verify_face():
             f"🚨 INTRUDER DETECTED\n\nSimilarity: {best_similarity}%"
         )
         send_telegram_photo(image_path, "Approval Required")
+        if mobile_token:
+            try:
+                send_notification(
+                    mobile_token,
+                    "🚨 Intruder Detected!",
+                    f"Unknown visitor at your locker! Similarity: {best_similarity}%. Open app to Approve or Reject."
+                )
+                print("FCM SENT: Intruder notification")
+            except Exception as fcm_err:
+                print("FCM ERROR:", fcm_err)
 
         return jsonify({
             "success": True,
@@ -625,6 +692,71 @@ def save_evidence():
 
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
+
+
+# ==========================================
+# APPROVAL PAGE — open this in browser/phone
+# Shows visitor photo + Approve / Reject buttons
+# Auto-refreshes every 2 seconds
+# ==========================================
+
+@app.route("/approval_page")
+def approval_page():
+    status = pending_access.get("status", "NONE")
+    image_url = f"http://{SERVER_IP}:5000/visitor_image"
+    similarity = pending_access.get("similarity", "")
+    event_time = pending_access.get("time", "")
+
+    if status == "WAITING":
+        body_content = f"""
+        <div class='card'>
+          <h2>⚠️ Unknown Visitor Detected</h2>
+          <p>Similarity: <b>{similarity}%</b> &nbsp;|&nbsp; Time: {event_time}</p>
+          <img src='{image_url}' onerror='this.src=""'>
+          <div class='buttons'>
+            <a href='/approve' class='btn approve'>✅ APPROVE</a>
+            <a href='/reject' class='btn reject'>❌ REJECT</a>
+          </div>
+        </div>
+        """
+    elif status == "APPROVED":
+        body_content = "<div class='card ok'><h2>✅ Access Approved</h2><p>Visitor was approved. Waiting for next event...</p></div>"
+    elif status == "REJECTED":
+        body_content = "<div class='card bad'><h2>❌ Access Rejected</h2><p>Intruder mode activated. Evidence photos being captured...</p></div>"
+    else:
+        body_content = "<div class='card'><h2>✅ Locker Secure</h2><p>No pending access requests. Waiting for trigger...</p></div>"
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>AI Smart Locker</title>
+  <meta http-equiv='refresh' content='2'>
+  <style>
+    body {{ font-family: Arial, sans-serif; background: #1a1a2e; color: #eee;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0; padding: 16px; box-sizing: border-box; }}
+    .card {{ background: #16213e; border-radius: 16px; padding: 24px;
+             max-width: 400px; width: 100%; text-align: center; box-shadow: 0 4px 20px #0005; }}
+    .card h2 {{ margin-top: 0; font-size: 1.3em; }}
+    .card img {{ width: 100%; border-radius: 12px; margin: 16px 0;
+                 border: 2px solid #0f3460; max-height: 280px; object-fit: cover; }}
+    .buttons {{ display: flex; gap: 12px; margin-top: 16px; }}
+    .btn {{ flex: 1; padding: 16px; border-radius: 12px; text-decoration: none;
+            font-size: 1.1em; font-weight: bold; color: #fff; }}
+    .approve {{ background: #27ae60; }}
+    .reject  {{ background: #c0392b; }}
+    .ok  {{ border: 2px solid #27ae60; }}
+    .bad {{ border: 2px solid #c0392b; }}
+    p {{ color: #aaa; font-size: 0.9em; }}
+  </style>
+</head>
+<body>
+  {body_content}
+</body>
+</html>"""
+    return html
 
 # ==========================================
 # MAIN — must stay at the very bottom of the file.
