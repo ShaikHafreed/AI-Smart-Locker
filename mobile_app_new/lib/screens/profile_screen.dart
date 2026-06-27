@@ -20,72 +20,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
   static const _textPrimary = Color(0xFFE8EDF5);
   static const _textSecondary = Color(0xFF6B7A99);
 
-  static const _pinKey = 'locker_pin';
-  static const _loggedInKey = 'locker_logged_in';
-  static const _ownerNameKey = 'locker_owner_name';
+  static const _ownerNameKey = 'user_name';
 
-  bool _isLoggedIn = false;
-  bool _hasPin = false;
   bool _loading = true;
   String _ownerName = 'Owner';
   Map<String, dynamic> _status = {};
-
-  String _enteredPin = '';
-  String _confirmPin = '';
-  bool _isSettingPin = false;
-  bool _pinError = false;
-  String _errorMsg = '';
+  List<dynamic> _logs = [];
 
   @override
   void initState() {
     super.initState();
-    _loadState();
+    _loadData();
   }
 
-  Future<void> _loadState() async {
+  Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    final pin = prefs.getString(_pinKey);
-    final loggedIn = prefs.getBool(_loggedInKey) ?? false;
     final name = prefs.getString(_ownerNameKey) ?? 'Owner';
+
     Map<String, dynamic> status = {};
+    List<dynamic> logs = [];
+
     try {
       status = await ApiService.getStatus();
+      logs   = await ApiService.getLogs();
     } catch (_) {}
+
     setState(() {
-      _hasPin = pin != null && pin.isNotEmpty;
-      _isLoggedIn = loggedIn;
       _ownerName = name;
-      _status = status;
-      _loading = false;
+      _status    = status;
+      _logs      = logs;
+      _loading   = false;
     });
   }
 
-  Future<void> _attemptLogin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedPin = prefs.getString(_pinKey);
-    if (pin == savedPin) {
-      await prefs.setBool(_loggedInKey, true);
-      setState(() { _isLoggedIn = true; _enteredPin = ''; _pinError = false; });
-    } else {
-      setState(() { _pinError = true; _errorMsg = 'Incorrect PIN. Try again.'; _enteredPin = ''; });
-    }
-  }
-
-  Future<void> _savePin(String pin) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_pinKey, pin);
-    await prefs.setBool(_loggedInKey, true);
-    setState(() {
-      _hasPin = true; _isLoggedIn = true; _isSettingPin = false;
-      _enteredPin = ''; _confirmPin = ''; _pinError = false;
-    });
-  }
-
-  Future<void> _signOut() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_loggedInKey, false);
-    setState(() { _isLoggedIn = false; _enteredPin = ''; });
-  }
+  // Count directly from logs — most accurate
+  int get _totalEvents  => _logs.length;
+  int get _ownerCount   => _logs.where((l) => (l['result'] ?? '').toString().toLowerCase().contains('owner')).length;
+  int get _intruderCount => _logs.where((l) => (l['result'] ?? '').toString().toLowerCase().contains('intruder')).length;
+  int get _approvedCount => _logs.where((l) => (l['result'] ?? '').toString().toLowerCase().contains('approv')).length;
+  int get _rejectedCount => _logs.where((l) => (l['result'] ?? '').toString().toLowerCase().contains('reject')).length;
 
   Future<void> _saveOwnerName(String name) async {
     final prefs = await SharedPreferences.getInstance();
@@ -93,106 +66,62 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _ownerName = name);
   }
 
-  void _onKeyTap(String key) {
-    if (_enteredPin.length >= 4) return;
-    setState(() { _enteredPin += key; _pinError = false; });
-    if (_enteredPin.length == 4) {
-      if (_isSettingPin) {
-        if (_confirmPin.isEmpty) {
-          setState(() { _confirmPin = _enteredPin; _enteredPin = ''; });
-        } else {
-          if (_enteredPin == _confirmPin) {
-            _savePin(_enteredPin);
-          } else {
-            setState(() {
-              _pinError = true; _errorMsg = 'PINs do not match. Try again.';
-              _enteredPin = ''; _confirmPin = '';
-            });
-          }
-        }
-      } else {
-        _attemptLogin(_enteredPin);
-      }
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Sign Out', style: TextStyle(color: Color(0xFFE8EDF5))),
+        content: Text('Are you sure you want to sign out?',
+            style: TextStyle(color: _textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sign Out',
+                style: TextStyle(color: Color(0xFFFF3B5C), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ApiService.logout();
+      if (mounted) Navigator.pushReplacementNamed(context, '/auth');
     }
-  }
-
-  void _onBackspace() {
-    if (_enteredPin.isEmpty) return;
-    setState(() => _enteredPin = _enteredPin.substring(0, _enteredPin.length - 1));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(backgroundColor: _bg, body: Center(child: CircularProgressIndicator(color: _cyan)));
-    if (!_isLoggedIn) return _buildLoginScreen();
-    return _buildProfileScreen();
-  }
-
-  Widget _buildLoginScreen() {
-    String promptText;
-    if (!_hasPin && !_isSettingPin) promptText = 'No PIN set yet';
-    else if (_isSettingPin && _confirmPin.isEmpty) promptText = 'Set a 4-digit PIN';
-    else if (_isSettingPin && _confirmPin.isNotEmpty) promptText = 'Confirm your PIN';
-    else promptText = 'Enter your PIN';
-
+    if (_loading) {
+      return const Scaffold(
+          backgroundColor: _bg,
+          body: Center(child: CircularProgressIndicator(color: _cyan)));
+    }
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
-        child: Center(
+        child: RefreshIndicator(
+          color: _cyan,
+          backgroundColor: _surface,
+          onRefresh: _loadData,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _cyan.withOpacity(0.1),
-                    border: Border.all(color: _cyan.withOpacity(0.4), width: 2),
-                  ),
-                  child: const Icon(Icons.lock_person_rounded, color: _cyan, size: 40),
-                ),
+                _buildHeader(),
                 const SizedBox(height: 28),
-                Text('AI Smart Locker',
-                    style: TextStyle(color: _textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                Text(promptText, style: TextStyle(color: _textSecondary, fontSize: 14)),
-                const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(4, (i) {
-                    final filled = i < _enteredPin.length;
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 10),
-                      width: 18, height: 18,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: filled ? _cyan : Colors.transparent,
-                        border: Border.all(color: filled ? _cyan : _border, width: 2),
-                      ),
-                    );
-                  }),
-                ),
-                if (_pinError) ...[
-                  const SizedBox(height: 16),
-                  Text(_errorMsg, style: const TextStyle(color: _red, fontSize: 13)),
-                ],
-                const SizedBox(height: 36),
-                _buildNumpad(),
+                _buildSystemStats(),
                 const SizedBox(height: 24),
-                if (!_hasPin && !_isSettingPin)
-                  TextButton(
-                    onPressed: () => setState(() => _isSettingPin = true),
-                    child: Text('Create a PIN', style: TextStyle(color: _cyan, fontSize: 14)),
-                  ),
-                if (_isSettingPin)
-                  TextButton(
-                    onPressed: () => setState(() {
-                      _isSettingPin = false; _enteredPin = ''; _confirmPin = ''; _pinError = false;
-                    }),
-                    child: Text('Cancel', style: TextStyle(color: _textSecondary, fontSize: 14)),
-                  ),
+                _buildAppInfo(),
+                const SizedBox(height: 24),
+                _buildActions(),
+                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -201,83 +130,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildNumpad() {
-    final keys = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['','0','⌫']];
-    return Column(
-      children: keys.map((row) => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: row.map((k) {
-            if (k.isEmpty) return const SizedBox(width: 70, height: 70);
-            return GestureDetector(
-              onTap: () => k == '⌫' ? _onBackspace() : _onKeyTap(k),
-              child: Container(
-                width: 70, height: 70,
-                margin: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: _card, shape: BoxShape.circle,
-                  border: Border.all(color: _border),
-                ),
-                child: Center(
-                  child: k == '⌫'
-                      ? const Icon(Icons.backspace_outlined, color: _textSecondary, size: 22)
-                      : Text(k, style: TextStyle(color: _textPrimary, fontSize: 22, fontWeight: FontWeight.w500)),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      )).toList(),
-    );
-  }
-
-  Widget _buildProfileScreen() {
-    return Scaffold(
-      backgroundColor: _bg,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildProfileHeader(),
-              const SizedBox(height: 28),
-              _buildSystemStats(),
-              const SizedBox(height: 24),
-              _buildAppInfo(),
-              const SizedBox(height: 24),
-              _buildActions(),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileHeader() {
+  Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('PROFILE',
-                style: TextStyle(color: _textSecondary, fontSize: 11, letterSpacing: 3, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(_ownerName,
-                style: TextStyle(color: _textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
-          ],
-        ),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('PROFILE',
+              style: TextStyle(color: _textSecondary, fontSize: 11, letterSpacing: 3, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(_ownerName,
+              style: TextStyle(color: _textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
+        ]),
         GestureDetector(
           onTap: _showRenameDialog,
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: _card, borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _border),
-            ),
+                color: _card, borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border)),
             child: const Icon(Icons.edit_rounded, color: _cyan, size: 20),
           ),
         ),
@@ -286,48 +156,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSystemStats() {
-    final total = _status['total_logs'] ?? 0;
-    final owners = _status['owner_count'] ?? 0;
-    final intruders = _status['intruder_count'] ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel('SYSTEM STATS'),
         const SizedBox(height: 14),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12, mainAxisSpacing: 12,
-          childAspectRatio: 1.7,
-          children: [
-            _statTile('Total Events', '$total', Icons.history_rounded, _cyan),
-            _statTile('Owner Access', '$owners', Icons.verified_user_rounded, _green),
-            _statTile('Intruders', '$intruders', Icons.warning_amber_rounded, _red),
-            _statTile('Server', '192.168.31.172', Icons.dns_rounded, const Color(0xFFB48EFF)),
-          ],
-        ),
+        // Row 1
+        Row(children: [
+          _statTile('Total Events',  '$_totalEvents',   Icons.history_rounded,        _cyan),
+          const SizedBox(width: 12),
+          _statTile('Owner Access',  '$_ownerCount',    Icons.verified_user_rounded,  _green),
+        ]),
+        const SizedBox(height: 12),
+        // Row 2
+        Row(children: [
+          _statTile('Intruders',     '$_intruderCount', Icons.warning_amber_rounded,  _red),
+          const SizedBox(width: 12),
+          _statTile('Approved',      '$_approvedCount', Icons.check_circle_rounded,   _cyan),
+        ]),
+        const SizedBox(height: 12),
+        // Row 3
+        Row(children: [
+          _statTile('Rejected',      '$_rejectedCount', Icons.cancel_rounded,          const Color(0xFFFFB800)),
+          const SizedBox(width: 12),
+          _statTile('Server',        '192.168.31.172',  Icons.dns_rounded,             const Color(0xFFB48EFF)),
+        ]),
       ],
     );
   }
 
   Widget _statTile(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: _card, borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: _card, borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(icon, color: color, size: 18),
-          const Spacer(),
+          const SizedBox(height: 10),
           Text(value,
-              style: TextStyle(color: _textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+              style: TextStyle(color: _textPrimary, fontSize: 20, fontWeight: FontWeight.w800),
               maxLines: 1, overflow: TextOverflow.ellipsis),
           Text(label, style: TextStyle(color: _textSecondary, fontSize: 10.5)),
-        ],
+        ]),
       ),
     );
   }
@@ -341,22 +213,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: _card, borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border),
-          ),
-          child: Column(
-            children: [
-              _infoRow('Model', 'ArcFace + MTCNN'),
-              Divider(color: _border, height: 1),
-              _infoRow('Threshold', 'Similarity ≥ 50%'),
-              Divider(color: _border, height: 1),
-              _infoRow('Polling', '60s approval window'),
-              Divider(color: _border, height: 1),
-              _infoRow('Evidence', '10 photos on reject'),
-              Divider(color: _border, height: 1),
-              _infoRow('Version', '1.0.0 — Final Year Project'),
-            ],
-          ),
+              color: _card, borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _border)),
+          child: Column(children: [
+            _infoRow('Model',     'ArcFace + MTCNN'),
+            Divider(color: _border, height: 1),
+            _infoRow('Threshold', 'Similarity ≥ 50%'),
+            Divider(color: _border, height: 1),
+            _infoRow('Polling',   '60s approval window'),
+            Divider(color: _border, height: 1),
+            _infoRow('Evidence',  '10 photos on reject'),
+            Divider(color: _border, height: 1),
+            _infoRow('Auth',      'JWT + OTP + Google'),
+            Divider(color: _border, height: 1),
+            _infoRow('Version',   '1.0.0 — Final Year Project'),
+          ]),
         ),
       ],
     );
@@ -369,7 +240,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(key, style: TextStyle(color: _textSecondary, fontSize: 13)),
-          Text(value, style: TextStyle(color: _textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+          Text(value,
+              style: TextStyle(color: _textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -381,14 +253,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         _sectionLabel('SECURITY'),
         const SizedBox(height: 14),
-        _actionTile('Change PIN', Icons.pin_outlined, _cyan, () {
-          setState(() {
-            _isLoggedIn = false; _isSettingPin = true;
-            _hasPin = false; _enteredPin = ''; _confirmPin = '';
-          });
-        }),
+        _actionTile('Manage Owner Faces', Icons.face_rounded, _cyan,
+            () => Navigator.pushNamed(context, '/owner_faces')),
         const SizedBox(height: 10),
-        _actionTile('Sign Out', Icons.logout_rounded, _red, _signOut),
+        _actionTile('View Gallery', Icons.photo_library_outlined, const Color(0xFFB48EFF),
+            () => Navigator.pushNamed(context, '/gallery')),
+        const SizedBox(height: 10),
+        _actionTile('Sign Out', Icons.logout_rounded, _red, _logout),
       ],
     );
   }
@@ -399,18 +270,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: _card, borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _border),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 14),
-            Text(label, style: TextStyle(color: _textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
-            const Spacer(),
-            Icon(Icons.chevron_right_rounded, color: _textSecondary, size: 20),
-          ],
-        ),
+            color: _card, borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border)),
+        child: Row(children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 14),
+          Text(label,
+              style: TextStyle(color: _textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
+          const Spacer(),
+          Icon(Icons.chevron_right_rounded, color: _textSecondary, size: 20),
+        ]),
       ),
     );
   }
@@ -437,11 +306,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: TextStyle(color: _textSecondary))),
           TextButton(
-            onPressed: () { _saveOwnerName(ctrl.text.trim()); Navigator.pop(context); },
-            child: const Text('Save', style: TextStyle(color: Color(0xFF00D4FF), fontWeight: FontWeight.w700)),
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: _textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              _saveOwnerName(ctrl.text.trim());
+              Navigator.pop(context);
+            },
+            child: const Text('Save',
+                style: TextStyle(color: Color(0xFF00D4FF), fontWeight: FontWeight.w700)),
           ),
         ],
       ),
