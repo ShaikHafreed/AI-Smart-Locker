@@ -3,8 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl =
-      "https://smudgy-imminent-hankie.ngrok-free.dev";
+  static const String baseUrl = "http://192.168.31.229:5000";
 
   // Shorter timeout — fail fast instead of waiting 30s
   static const _timeout = Duration(seconds: 10);

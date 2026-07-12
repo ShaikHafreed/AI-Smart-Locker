@@ -23,7 +23,7 @@ class _AuthScreenState extends State<AuthScreen>
   static const _textPrimary  = Color(0xFFE8EDF5);
   static const _textSec      = Color(0xFF6B7A99);
 
-  static const baseUrl = "https://smudgy-imminent-hankie.ngrok-free.dev";
+  static const baseUrl = "http://192.168.31.229:5000";
   static const _headers = {
     "ngrok-skip-browser-warning": "true",
     "Content-Type": "application/json"

@@ -8,11 +8,18 @@ from functools import wraps
 import requests
 import sqlite3
 import os
+import sys
 import uuid
 import hashlib
 import jwt
 import random
 import time
+
+# Windows' console defaults to cp1252, which can't encode the emoji used in
+# several print() calls below (crashes the request with UnicodeEncodeError).
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # ==========================================
 # APP
@@ -42,7 +49,7 @@ MSG91_SENDER_ID   = os.environ.get("MSG91_SENDER_ID", "AILOCK")  # 6 chars
 # CONFIG
 # ==========================================
 
-SERVER_IP    = "192.168.31.172"
+SERVER_IP    = "192.168.31.229"
 BOT_TOKEN    = os.environ.get("LOCKER_BOT_TOKEN", "")
 CHAT_ID      = os.environ.get("LOCKER_CHAT_ID", "")
 
@@ -793,4 +800,4 @@ def approval_page():
 if __name__ == "__main__":
     add_system_event("Server Started")
     print("SERVER READY")
-    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False, threaded=True)

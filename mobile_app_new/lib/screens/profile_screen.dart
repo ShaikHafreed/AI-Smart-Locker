@@ -179,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Row(children: [
           _statTile('Rejected',      '$_rejectedCount', Icons.cancel_rounded,          const Color(0xFFFFB800)),
           const SizedBox(width: 12),
-          _statTile('Server',        '192.168.31.172',  Icons.dns_rounded,             const Color(0xFFB48EFF)),
+          _statTile('Server',        '192.168.31.229',  Icons.dns_rounded,             const Color(0xFFB48EFF)),
         ]),
       ],
     );
