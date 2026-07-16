@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
+#include "nvs_flash.h"
 
 #include "board_config.h"
 
@@ -310,6 +311,10 @@ void initCameraWithRetry() {
     Serial.printf("Camera init attempt %d/%d...\n", i, maxAttempts);
     if (initCameraOnce()) {
       Serial.println("Camera ready.");
+      Serial.printf("PSRAM found: %s | Free heap: %u | Free PSRAM: %u\n",
+                     psramFound() ? "YES" : "NO",
+                     ESP.getFreeHeap(),
+                     ESP.getFreePsram());
       return;
     }
     Serial.println("Camera init failed.");
@@ -336,19 +341,25 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   buzzerOff();
 
-  delay(300); // let the supply settle after the initial boot current draw,
-              // before the camera's own init current spike hits it
+  delay(300); // let the supply settle after the initial boot current draw
 
-  initCameraWithRetry(); // no longer aborts setup() on failure - WiFi still comes up
-                          // so the board stays reachable and RESET can recover it
+  // WiFi's NVS storage partition can end up blanked-but-not-reformatted
+  // (e.g. after "Erase All Flash Before Sketch Upload"), which otherwise
+  // hangs WiFi.mode() instead of failing cleanly. Detect and reformat it.
+  esp_err_t nvsResult = nvs_flash_init();
+  if (nvsResult == ESP_ERR_NVS_NO_FREE_PAGES || nvsResult == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    Serial.println("NVS partition needs reformatting - erasing and reinitializing...");
+    nvs_flash_erase();
+    nvsResult = nvs_flash_init();
+  }
+  Serial.printf("NVS init result: %d\n", nvsResult);
 
-  // Lower TX power before the radio powers up - WiFi's current draw on top of
-  // an already-running camera is what's tipping a marginal supply over the edge.
-  // This buys headroom; a proper 5V supply (not through the FTDI adapter) is
-  // still the real fix if crashes continue.
+  // WiFi now comes up BEFORE the camera - camera init was consistently
+  // crashing WiFi.mode() on this hardware regardless of power/memory/NVS
+  // state, which points to the two drivers conflicting over some shared
+  // resource when camera claims it first. Reversing the order tests that.
   WiFi.mode(WIFI_STA);
   WiFi.setTxPower(WIFI_POWER_7dBm);
-
   WiFi.begin(ssid, password);
   Serial.print("Connecting WiFi");
   while (WiFi.status() != WL_CONNECTED) {
@@ -359,6 +370,9 @@ void setup() {
   Serial.println("WiFi Connected");
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
+
+  initCameraWithRetry(); // no longer aborts setup() on failure - board stays
+                          // reachable over WiFi and RESET can recover it
 
   startCameraServer();
   Serial.println("System Ready");
