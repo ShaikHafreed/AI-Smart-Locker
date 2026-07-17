@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api_service.dart';
+import '../theme.dart';
 import 'approval_request_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -10,17 +11,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  static const _bg           = Color(0xFF0A0E1A);
-  static const _surface      = Color(0xFF111827);
-  static const _card         = Color(0xFF1C2333);
-  static const _border       = Color(0xFF2A3550);
-  static const _cyan         = Color(0xFF00D4FF);
-  static const _green        = Color(0xFF00FF88);
-  static const _red          = Color(0xFFFF3B5C);
-  static const _orange       = Color(0xFFFFB800);
-  static const _textPrimary  = Color(0xFFE8EDF5);
-  static const _textSecondary = Color(0xFF6B7A99);
-
   Map<String, dynamic> _status = {};
   List<dynamic>        _logs   = [];
   bool   _loading   = true;
@@ -80,17 +70,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int get _totalEvents   => _logs.length;
   String get _lastEvent  => _logs.isNotEmpty ? _logs.last['result'].toString() : 'No Activity';
   bool get _hasPending   => (_status['pending'] ?? 'NONE') == 'WAITING';
+  bool get _isOnline     => (_status['locker'] ?? '') == 'ONLINE';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator(color: _cyan))
+            ? const Center(child: CircularProgressIndicator(color: AppColors.cyan))
             : RefreshIndicator(
-                color: _cyan,
-                backgroundColor: _surface,
+                color: AppColors.cyan,
+                backgroundColor: AppColors.surface,
                 onRefresh: _manualRefresh,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -99,12 +90,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildHeader(),
+                      const SizedBox(height: 22),
+                      _buildSentinel(),
                       const SizedBox(height: 20),
-                      if (_hasPending) _buildPendingAlert(),
-                      _buildLockerStatus(),
-                      const SizedBox(height: 20),
+                      if (_hasPending) ...[_buildPendingAlert(), const SizedBox(height: 20)],
                       _buildStatsGrid(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 22),
                       _buildRecentActivity(),
                       const SizedBox(height: 20),
                     ],
@@ -116,142 +107,117 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHeader() {
+    final statusColor = _hasPending ? AppColors.coral : _isOnline ? AppColors.mint : AppColors.textLo;
+    final statusText  = _hasPending ? 'ALERT' : _isOnline ? 'SYSTEM ONLINE' : 'OFFLINE';
     return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('DASHBOARD',
-            style: TextStyle(color: _textSecondary, fontSize: 11,
-                letterSpacing: 3, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
+        Row(children: [
+          Container(
+            width: 7, height: 7,
+            decoration: BoxDecoration(
+              color: statusColor, shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: statusColor.withOpacity(0.6), blurRadius: 8, spreadRadius: 1)],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(statusText,
+              style: TextStyle(color: statusColor, fontFamily: kMono, fontSize: 11,
+                  letterSpacing: 2.5, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 6),
         Text('Hi, $_userName 👋',
-            style: TextStyle(color: _textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
+            style: const TextStyle(color: AppColors.textHi, fontSize: 24, fontWeight: FontWeight.w700)),
       ]),
       GestureDetector(
         onTap: _manualRefresh,
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: _card, borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _border)),
-          child: _refreshing
-              ? SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(color: _cyan, strokeWidth: 2))
-              : const Icon(Icons.refresh_rounded, color: _cyan, size: 20),
-        ),
+        child: GlowChip(_refreshing ? Icons.hourglass_top_rounded : Icons.refresh_rounded, AppColors.cyan),
       ),
     ]);
   }
 
-  Widget _buildPendingAlert() {
-    return GestureDetector(
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => ApprovalRequestScreen())),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: _red.withOpacity(0.1), borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _red.withOpacity(0.5))),
-        child: Row(children: [
-          Container(width: 10, height: 10,
-              decoration: BoxDecoration(color: _red, shape: BoxShape.circle)),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('⚠️ Unknown Visitor Detected!',
-                style: TextStyle(color: _red, fontWeight: FontWeight.w700, fontSize: 14)),
-            Text('Tap to Approve or Reject',
-                style: TextStyle(color: _textSecondary, fontSize: 12)),
-          ])),
-          Icon(Icons.chevron_right_rounded, color: _red),
-        ]),
-      ),
+  Widget _buildSentinel() {
+    final color = _hasPending ? AppColors.coral : _isOnline ? AppColors.mint : AppColors.textLo;
+    final title = _hasPending ? 'INTRUDER PENDING' : _isOnline ? 'VAULT ARMED' : 'OFFLINE';
+    final sub   = _hasPending
+        ? 'Unknown visitor awaiting your decision'
+        : _isOnline
+            ? 'Face ID monitoring is active'
+            : 'Device not reachable right now';
+    final icon  = _hasPending
+        ? Icons.gpp_maybe_rounded
+        : _isOnline ? Icons.verified_user_rounded : Icons.lock_open_rounded;
+
+    return PanelCard(
+      glow: color,
+      borderColor: color.withOpacity(0.30),
+      padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 20),
+      child: Column(children: [
+        SentinelCore(size: 172, color: color, armed: _isOnline || _hasPending, icon: icon),
+        const SizedBox(height: 20),
+        Text(title,
+            style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+        const SizedBox(height: 6),
+        Text(sub,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.textLo, fontSize: 13)),
+      ]),
     );
   }
 
-  Widget _buildLockerStatus() {
-    final isOnline = (_status['locker'] ?? '') == 'ONLINE';
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-          color: _card, borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isOnline ? _green.withOpacity(0.3) : _border)),
+  Widget _buildPendingAlert() {
+    return PanelCard(
+      glow: AppColors.coral,
+      borderColor: AppColors.coral.withOpacity(0.5),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => ApprovalRequestScreen())),
       child: Row(children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-              color: isOnline ? _green.withOpacity(0.1) : _textSecondary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12)),
-          child: Icon(Icons.lock_rounded,
-              color: isOnline ? _green : _textSecondary, size: 24),
-        ),
-        const SizedBox(width: 16),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Locker Status',
-              style: TextStyle(color: _textSecondary, fontSize: 12)),
-          const SizedBox(height: 4),
-          Text(isOnline ? 'ONLINE & SECURE' : 'OFFLINE',
-              style: TextStyle(
-                  color: isOnline ? _green : _textSecondary,
-                  fontSize: 16, fontWeight: FontWeight.w700)),
+        const GlowChip(Icons.notifications_active_rounded, AppColors.coral, size: 18, padding: 9),
+        const SizedBox(width: 14),
+        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Unknown visitor detected',
+              style: TextStyle(color: AppColors.coral, fontWeight: FontWeight.w700, fontSize: 14)),
+          SizedBox(height: 2),
+          Text('Tap to approve or reject access',
+              style: TextStyle(color: AppColors.textLo, fontSize: 12)),
         ])),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-              color: isOnline ? _green.withOpacity(0.1) : _textSecondary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20)),
-          child: Row(children: [
-            Container(width: 6, height: 6,
-                decoration: BoxDecoration(
-                    color: isOnline ? _green : _textSecondary,
-                    shape: BoxShape.circle)),
-            const SizedBox(width: 6),
-            Text(isOnline ? 'Active' : 'Offline',
-                style: TextStyle(
-                    color: isOnline ? _green : _textSecondary,
-                    fontSize: 12, fontWeight: FontWeight.w600)),
-          ]),
-        ),
+        const Icon(Icons.chevron_right_rounded, color: AppColors.coral),
       ]),
     );
   }
 
   Widget _buildStatsGrid() {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('SYSTEM STATS',
-          style: TextStyle(color: _textSecondary, fontSize: 11,
-              letterSpacing: 2.5, fontWeight: FontWeight.w600)),
+      const SystemLabel('Telemetry'),
       const SizedBox(height: 14),
       Row(children: [
-        _statCard('Total Events',  '$_totalEvents',   Icons.history_rounded,       _cyan),
+        _statCard('Total Events',  '$_totalEvents',   Icons.equalizer_rounded,     AppColors.cyan),
         const SizedBox(width: 12),
-        _statCard('Owner Access',  '$_ownerCount',    Icons.verified_user_rounded, _green),
+        _statCard('Owner Access',  '$_ownerCount',    Icons.verified_user_rounded, AppColors.mint),
       ]),
       const SizedBox(height: 12),
       Row(children: [
-        _statCard('Intruders',     '$_intruderCount', Icons.warning_amber_rounded, _red),
+        _statCard('Intruders',     '$_intruderCount', Icons.warning_amber_rounded, AppColors.coral),
         const SizedBox(width: 12),
-        _statCard('Last Event',    _lastEvent.length > 12
-            ? '${_lastEvent.substring(0, 12)}..' : _lastEvent,
-            Icons.access_time_rounded, _orange),
+        _statCard('Last Event',    _lastEvent.length > 11
+            ? '${_lastEvent.substring(0, 11)}…' : _lastEvent,
+            Icons.access_time_rounded, AppColors.amber),
       ]),
     ]);
   }
 
   Widget _statCard(String label, String value, IconData icon, Color color) {
     return Expanded(
-      child: Container(
+      child: PanelCard(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: _card, borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _border)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 12),
+          GlowChip(icon, color, size: 16, padding: 8),
+          const SizedBox(height: 14),
           Text(value,
-              style: TextStyle(color: _textPrimary, fontSize: 22,
-                  fontWeight: FontWeight.w800),
+              style: const TextStyle(color: AppColors.textHi, fontFamily: kMono,
+                  fontSize: 22, fontWeight: FontWeight.w700),
               maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 4),
-          Text(label, style: TextStyle(color: _textSecondary, fontSize: 11)),
+          Text(label, style: const TextStyle(color: AppColors.textLo, fontSize: 11)),
         ]),
       ),
     );
@@ -260,28 +226,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildRecentActivity() {
     final recent = _logs.reversed.take(5).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text('RECENT ACTIVITY',
-            style: TextStyle(color: _textSecondary, fontSize: 11,
-                letterSpacing: 2.5, fontWeight: FontWeight.w600)),
-        Text('${_logs.length} total',
-            style: TextStyle(color: _textSecondary, fontSize: 11)),
-      ]),
+      SystemLabel('Recent Activity', trailing: Text('${_logs.length} total',
+          style: const TextStyle(color: AppColors.textLo, fontFamily: kMono, fontSize: 11))),
       const SizedBox(height: 14),
       if (recent.isEmpty)
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-              color: _card, borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _border)),
-          child: Center(child: Text('No activity yet',
-              style: TextStyle(color: _textSecondary))),
+        PanelCard(
+          child: Center(child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Text('No activity yet', style: TextStyle(color: AppColors.textLo)),
+          )),
         )
       else
-        Container(
-          decoration: BoxDecoration(
-              color: _card, borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _border)),
+        PanelCard(
+          padding: EdgeInsets.zero,
           child: Column(
             children: recent.asMap().entries.map((entry) {
               final i    = entry.key;
@@ -290,7 +247,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               final time   = log['event_time']?.toString() ?? '';
               final isOwner    = result.contains('Owner') || result.contains('Approved');
               final isIntruder = result.contains('Intruder') || result.contains('Rejected');
-              final color = isOwner ? _green : isIntruder ? _red : _cyan;
+              final color = isOwner ? AppColors.mint : isIntruder ? AppColors.coral : AppColors.cyan;
               final icon  = isOwner
                   ? Icons.check_circle_rounded
                   : isIntruder
@@ -299,32 +256,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               return Column(children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   child: Row(children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                          color: color.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8)),
-                      child: Icon(icon, color: color, size: 16),
-                    ),
+                    GlowChip(icon, color, size: 16, padding: 8),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(result,
-                          style: TextStyle(color: _textPrimary, fontSize: 13,
-                              fontWeight: FontWeight.w500)),
+                          style: const TextStyle(color: AppColors.textHi, fontSize: 13,
+                              fontWeight: FontWeight.w600)),
                       if (time.isNotEmpty)
                         Text(time.length > 19 ? time.substring(0, 19) : time,
-                            style: TextStyle(color: _textSecondary, fontSize: 11)),
+                            style: const TextStyle(color: AppColors.textLo, fontFamily: kMono, fontSize: 11)),
                     ])),
                     if (log['similarity'] != null && (log['similarity'] as num) > 0)
                       Text('${(log['similarity'] as num).toStringAsFixed(1)}%',
-                          style: TextStyle(color: color, fontSize: 12,
-                              fontWeight: FontWeight.w600)),
+                          style: TextStyle(color: color, fontFamily: kMono, fontSize: 12,
+                              fontWeight: FontWeight.w700)),
                   ]),
                 ),
                 if (i < recent.length - 1)
-                  Divider(color: _border, height: 1, indent: 16, endIndent: 16),
+                  const Divider(color: AppColors.line, height: 1, indent: 14, endIndent: 14),
               ]);
             }).toList(),
           ),

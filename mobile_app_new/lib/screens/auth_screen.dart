@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../theme.dart';
+import '../api_service.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({Key? key}) : super(key: key);
@@ -23,7 +24,6 @@ class _AuthScreenState extends State<AuthScreen>
   static const _textPrimary  = Color(0xFFE8EDF5);
   static const _textSec      = Color(0xFF6B7A99);
 
-  static const baseUrl = "http://192.168.31.229:5000";
   static const _headers = {
     "ngrok-skip-browser-warning": "true",
     "Content-Type": "application/json"
@@ -40,27 +40,13 @@ class _AuthScreenState extends State<AuthScreen>
   bool   _smsSent    = false;
   int    _resendTimer = 0;
 
-  late AnimationController _pulseCtrl;
-  late Animation<double>   _pulseAnim;
-
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
     serverClientId: '659356355972-pp40m043r12v2c0pcvij41po72s08s2u.apps.googleusercontent.com',
   );
 
   @override
-  void initState() {
-    super.initState();
-    _pulseCtrl = AnimationController(
-        vsync: this, duration: const Duration(seconds: 2))
-      ..repeat(reverse: true);
-    _pulseAnim = Tween<double>(begin: 0.8, end: 1.0).animate(
-        CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
-  }
-
-  @override
   void dispose() {
-    _pulseCtrl.dispose();
     _phoneCtrl.dispose();
     _otpCtrl.dispose();
     _nameCtrl.dispose();
@@ -76,8 +62,8 @@ class _AuthScreenState extends State<AuthScreen>
     }
     setState(() { _loading = true; _errorMsg = ''; _demoOtp = ''; });
     try {
-      final r = await http.post(
-        Uri.parse('$baseUrl/auth/send_otp'),
+      final r = await ApiService.publicPost(
+        '/auth/send_otp',
         headers: _headers,
         body: jsonEncode({'phone': phone}),
       );
@@ -122,8 +108,8 @@ class _AuthScreenState extends State<AuthScreen>
     }
     setState(() { _loading = true; _errorMsg = ''; });
     try {
-      final r = await http.post(
-        Uri.parse('$baseUrl/auth/verify_otp'),
+      final r = await ApiService.publicPost(
+        '/auth/verify_otp',
         headers: _headers,
         body: jsonEncode({'phone': phone, 'otp': otp, 'name': name}),
       );
@@ -152,8 +138,8 @@ class _AuthScreenState extends State<AuthScreen>
       final auth    = await account.authentication;
       final idToken = auth.idToken ?? '';
 
-      final r = await http.post(
-        Uri.parse('$baseUrl/auth/google'),
+      final r = await ApiService.publicPost(
+        '/auth/google',
         headers: _headers,
         body: jsonEncode({
           'id_token':  idToken,
@@ -251,26 +237,15 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Widget _buildLogo() {
-    return AnimatedBuilder(
-      animation: _pulseAnim,
-      builder: (_, __) => Transform.scale(
-        scale: _pulseAnim.value,
-        child: Container(
-          width: 88, height: 88,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: _cyan.withOpacity(0.1),
-            border: Border.all(color: _cyan.withOpacity(0.5), width: 2),
-            boxShadow: [BoxShadow(color: _cyan.withOpacity(0.2), blurRadius: 20, spreadRadius: 4)],
-          ),
-          child: const Icon(Icons.lock_rounded, color: _cyan, size: 42),
-        ),
-      ),
-    );
+    return const SentinelCore(size: 140, color: _cyan, icon: Icons.lock_rounded);
   }
 
   Widget _buildTitle() {
     return Column(children: [
+      Text(_otpSent ? 'VERIFY IDENTITY' : 'SECURE ACCESS',
+          style: const TextStyle(color: _cyan, fontFamily: kMono, fontSize: 11,
+              letterSpacing: 3, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 10),
       Text('AI Smart Cupboard',
           style: TextStyle(color: _textPrimary, fontSize: 24, fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),

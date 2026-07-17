@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api_service.dart';
+import '../theme.dart';
+import 'log_detail_screen.dart';
 
 class LogsScreen extends StatefulWidget {
   const LogsScreen({Key? key}) : super(key: key);
@@ -10,18 +12,6 @@ class LogsScreen extends StatefulWidget {
 }
 
 class _LogsScreenState extends State<LogsScreen> {
-  static const _bg = Color(0xFF0A0E1A);
-  static const _surface = Color(0xFF111827);
-  static const _card = Color(0xFF1C2333);
-  static const _border = Color(0xFF2A3550);
-  static const _cyan = Color(0xFF00D4FF);
-  static const _green = Color(0xFF00FF88);
-  static const _red = Color(0xFFFF3B5C);
-  static const _amber = Color(0xFFFFB800);
-  static const _purple = Color(0xFFB48EFF);
-  static const _textPrimary = Color(0xFFE8EDF5);
-  static const _textSecondary = Color(0xFF6B7A99);
-
   List<dynamic> _logs = [];
   bool _loading = true;
   bool _refreshing = false;
@@ -95,12 +85,12 @@ class _LogsScreenState extends State<LogsScreen> {
 
   Color _resultColor(String result) {
     final r = result.toLowerCase();
-    if (r.contains('owner') || r.contains('verified')) return _green;
-    if (r.contains('intruder') || r.contains('no face') || r.contains('detected')) return _red;
-    if (r.contains('approv')) return _cyan;
-    if (r.contains('reject')) return _amber;
-    if (r.contains('evidence')) return _purple;
-    return _textSecondary;
+    if (r.contains('owner') || r.contains('verified')) return AppColors.mint;
+    if (r.contains('intruder') || r.contains('no face') || r.contains('detected')) return AppColors.coral;
+    if (r.contains('approv')) return AppColors.cyan;
+    if (r.contains('reject')) return AppColors.amber;
+    if (r.contains('evidence')) return AppColors.violet;
+    return AppColors.textLo;
   }
 
   IconData _resultIcon(String result) {
@@ -117,27 +107,27 @@ class _LogsScreenState extends State<LogsScreen> {
   Widget build(BuildContext context) {
     final filtered = _filteredLogs;
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: AppColors.bg,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(),
             _buildStatsRow(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             _buildFilters(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: _cyan))
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.cyan))
                   : filtered.isEmpty
                       ? _buildEmpty()
                       : RefreshIndicator(
-                          color: _cyan,
-                          backgroundColor: _surface,
+                          color: AppColors.cyan,
+                          backgroundColor: AppColors.surface,
                           onRefresh: () => _fetchLogs(),
                           child: ListView.separated(
-                            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                             itemCount: filtered.length,
                             separatorBuilder: (_, __) => const SizedBox(height: 10),
                             itemBuilder: (_, i) => _buildLogCard(filtered[i]),
@@ -152,34 +142,29 @@ class _LogsScreenState extends State<LogsScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('ACCESS LOGS',
-                  style: TextStyle(color: _textSecondary, fontSize: 11, letterSpacing: 3, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text('${_logs.length} Events',
-                  style: TextStyle(color: _textPrimary, fontSize: 22, fontWeight: FontWeight.w700)),
+              const SystemLabel('Access Logs'),
+              const SizedBox(height: 6),
+              Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                Text('${_logs.length}',
+                    style: const TextStyle(color: AppColors.textHi, fontFamily: kMono,
+                        fontSize: 26, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 8),
+                const Text('events recorded',
+                    style: TextStyle(color: AppColors.textLo, fontSize: 13)),
+              ]),
             ],
           ),
           GestureDetector(
             onTap: () => _fetchLogs(),
-            child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _refreshing ? _cyan : _border),
-              ),
-              child: _refreshing
-                  ? const SizedBox(width: 20, height: 20,
-                      child: CircularProgressIndicator(color: _cyan, strokeWidth: 2))
-                  : const Icon(Icons.refresh_rounded, color: _cyan, size: 20),
-            ),
+            child: GlowChip(_refreshing ? Icons.hourglass_top_rounded : Icons.refresh_rounded, AppColors.cyan),
           ),
         ],
       ),
@@ -191,13 +176,13 @@ class _LogsScreenState extends State<LogsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       child: Row(
         children: [
-          _miniStat('Owners',    _countOwners(),    _green),
+          _miniStat('Owners',    _countOwners(),    AppColors.mint),
           const SizedBox(width: 10),
-          _miniStat('Intruders', _countIntruders(), _red),
+          _miniStat('Intruders', _countIntruders(), AppColors.coral),
           const SizedBox(width: 10),
-          _miniStat('Approved',  _countApproved(),  _cyan),
+          _miniStat('Approved',  _countApproved(),  AppColors.cyan),
           const SizedBox(width: 10),
-          _miniStat('Rejected',  _countRejected(),  _amber),
+          _miniStat('Rejected',  _countRejected(),  AppColors.amber),
         ],
       ),
     );
@@ -206,16 +191,17 @@ class _LogsScreenState extends State<LogsScreen> {
   Widget _miniStat(String label, int count, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.25)),
         ),
         child: Column(
           children: [
-            Text('$count', style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)),
-            Text(label, style: TextStyle(color: _textSecondary, fontSize: 10)),
+            Text('$count', style: TextStyle(color: color, fontFamily: kMono, fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text(label, style: const TextStyle(color: AppColors.textLo, fontSize: 10)),
           ],
         ),
       ),
@@ -224,7 +210,7 @@ class _LogsScreenState extends State<LogsScreen> {
 
   Widget _buildFilters() {
     return SizedBox(
-      height: 42,
+      height: 40,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
@@ -239,13 +225,16 @@ class _LogsScreenState extends State<LogsScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: active ? _cyan : _card,
+                color: active ? AppColors.cyan.withOpacity(0.14) : AppColors.panelBottom,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: active ? _cyan : _border),
+                border: Border.all(color: active ? AppColors.cyan : AppColors.line),
+                boxShadow: active
+                    ? [BoxShadow(color: AppColors.cyan.withOpacity(0.2), blurRadius: 12, spreadRadius: -4)]
+                    : null,
               ),
               child: Text(f,
                   style: TextStyle(
-                    color: active ? _bg : _textSecondary,
+                    color: active ? AppColors.cyan : AppColors.textLo,
                     fontSize: 13,
                     fontWeight: active ? FontWeight.w700 : FontWeight.w500,
                   )),
@@ -266,17 +255,17 @@ class _LogsScreenState extends State<LogsScreen> {
         ? 'Similarity: ${similarity.toStringAsFixed(1)}%'
         : (log['image_name'] ?? '').toString();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-      ),
+    return PanelCard(
+      padding: EdgeInsets.zero,
+      radius: 14,
+      onTap: () => Navigator.push(context, MaterialPageRoute(
+        builder: (_) => LogDetailScreen(log: Map<String, dynamic>.from(log as Map)),
+      )),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // colored left border
+            // colored left accent
             Container(
               width: 4,
               decoration: BoxDecoration(
@@ -285,21 +274,13 @@ class _LogsScreenState extends State<LogsScreen> {
                   topLeft: Radius.circular(14),
                   bottomLeft: Radius.circular(14),
                 ),
+                boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 8, spreadRadius: -2)],
               ),
             ),
-            // icon
             Padding(
-              padding: const EdgeInsets.all(14),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(_resultIcon(result), color: color, size: 18),
-              ),
+              padding: const EdgeInsets.all(13),
+              child: GlowChip(_resultIcon(result), color, size: 18, padding: 8),
             ),
-            // text
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -308,21 +289,28 @@ class _LogsScreenState extends State<LogsScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(result,
-                        style: TextStyle(color: _textPrimary, fontSize: 14, fontWeight: FontWeight.w600)),
+                        style: const TextStyle(color: AppColors.textHi, fontSize: 14, fontWeight: FontWeight.w600)),
                     if (subtitle.isNotEmpty) ...[
                       const SizedBox(height: 3),
                       Text(subtitle,
-                          style: TextStyle(color: _textSecondary, fontSize: 12),
+                          style: const TextStyle(color: AppColors.textLo, fontSize: 12),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ],
                 ),
               ),
             ),
-            // time
             Padding(
-              padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
-              child: Text(time, style: TextStyle(color: _textSecondary, fontSize: 11)),
+              padding: const EdgeInsets.fromLTRB(0, 14, 12, 14),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(time, style: const TextStyle(color: AppColors.textLo, fontFamily: kMono, fontSize: 11)),
+                  const SizedBox(height: 4),
+                  Icon(Icons.chevron_right_rounded, color: AppColors.textLo.withOpacity(0.6), size: 16),
+                ],
+              ),
             ),
           ],
         ),
@@ -335,9 +323,9 @@ class _LogsScreenState extends State<LogsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.history_toggle_off_rounded, color: _textSecondary, size: 48),
+          Icon(Icons.history_toggle_off_rounded, color: AppColors.textLo.withOpacity(0.6), size: 52),
           const SizedBox(height: 14),
-          Text('No logs for "$_activeFilter"', style: TextStyle(color: _textSecondary, fontSize: 15)),
+          Text('No logs for "$_activeFilter"', style: const TextStyle(color: AppColors.textLo, fontSize: 15)),
         ],
       ),
     );

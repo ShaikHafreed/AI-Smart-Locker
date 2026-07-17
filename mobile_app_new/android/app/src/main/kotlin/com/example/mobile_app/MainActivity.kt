@@ -2,9 +2,13 @@ package com.example.mobile_app
 
 import android.Manifest
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -34,21 +38,114 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
-                if (call.method == "pickImage") {
-                    // Clear any previous pending result
-                    pendingResult = result
-                    val source = call.argument<String>("source") ?: "gallery"
-                    pendingSource = source
+                when (call.method) {
+                    "pickImage" -> {
+                        // Clear any previous pending result
+                        pendingResult = result
+                        val source = call.argument<String>("source") ?: "gallery"
+                        pendingSource = source
 
-                    if (source == "camera") {
-                        checkCameraPermissionAndOpen()
-                    } else {
-                        checkStoragePermissionAndOpen()
+                        if (source == "camera") {
+                            checkCameraPermissionAndOpen()
+                        } else {
+                            checkStoragePermissionAndOpen()
+                        }
                     }
-                } else {
-                    result.notImplemented()
+                    "saveImageToGallery" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val name = call.argument<String>("name")
+                            ?: "locker_${System.currentTimeMillis()}.jpg"
+                        if (bytes == null) {
+                            result.error("NO_DATA", "No image bytes provided", null)
+                        } else {
+                            result.success(saveBytesToGallery(bytes, name))
+                        }
+                    }
+                    "shareImage" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        val name = call.argument<String>("name")
+                            ?: "locker_${System.currentTimeMillis()}.jpg"
+                        val text = call.argument<String>("text") ?: ""
+                        if (bytes == null) {
+                            result.error("NO_DATA", "No image bytes provided", null)
+                        } else {
+                            shareBytes(bytes, name, text)
+                            result.success(true)
+                        }
+                    }
+                    else -> result.notImplemented()
                 }
             }
+    }
+
+    // ── SAVE TO PHONE GALLERY ──────────────────────────────────
+
+    private fun normalizeName(name: String): String {
+        return if (name.endsWith(".jpg", true) || name.endsWith(".jpeg", true) ||
+                   name.endsWith(".png", true)) name else "$name.jpg"
+    }
+
+    private fun saveBytesToGallery(bytes: ByteArray, name: String): Boolean {
+        val fileName = normalizeName(name)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ — MediaStore insert, no permission needed
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/AI Smart Locker")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val resolver = contentResolver
+                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    ?: return false
+                resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                true
+            } else {
+                // Legacy — write to Pictures and trigger media scan
+                val picturesDir = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_PICTURES)
+                val dir = File(picturesDir, "AI Smart Locker")
+                if (!dir.exists()) dir.mkdirs()
+                val file = File(dir, fileName)
+                file.outputStream().use { it.write(bytes) }
+                MediaScannerConnection.scanFile(
+                    this, arrayOf(file.absolutePath), arrayOf("image/jpeg"), null)
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // ── SHARE IMAGE (WhatsApp, etc.) ───────────────────────────
+
+    private fun shareBytes(bytes: ByteArray, name: String, text: String) {
+        try {
+            val fileName = normalizeName(name)
+            val dir = File(cacheDir, "shared")
+            if (!dir.exists()) dir.mkdirs()
+            val file = File(dir, fileName)
+            file.outputStream().use { it.write(bytes) }
+
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/jpeg"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                if (text.isNotEmpty()) putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Share via"))
+        } catch (e: Exception) {
+            // ignore — nothing to share
+        }
     }
 
     // ── PERMISSIONS ────────────────────────────────────────────

@@ -9,6 +9,7 @@ import 'screens/owner_faces_screen.dart';
 import 'screens/approval_request_screen.dart';
 import 'notification_service.dart';
 import 'api_service.dart';
+import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,12 +28,12 @@ class SmartLockerApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0A0E1A),
+        scaffoldBackgroundColor: AppColors.bg,
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00D4FF),
-          secondary: Color(0xFF00FF88),
-          surface: Color(0xFF111827),
-          background: Color(0xFF0A0E1A),
+          primary: AppColors.cyan,
+          secondary: AppColors.mint,
+          surface: AppColors.surface,
+          background: AppColors.bg,
         ),
         useMaterial3: true,
       ),
@@ -64,7 +65,7 @@ class _SplashRouterState extends State<SplashRouter> {
   }
 
   Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(const Duration(milliseconds: 1400));
     final loggedIn = await ApiService.isLoggedIn();
     if (mounted) {
       Navigator.pushReplacementNamed(
@@ -74,21 +75,34 @@ class _SplashRouterState extends State<SplashRouter> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF0A0E1A),
+    return Scaffold(
+      backgroundColor: AppColors.bg,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock_rounded, color: Color(0xFF00D4FF), size: 64),
-            SizedBox(height: 20),
-            Text('AI Smart Cupboard',
-                style: TextStyle(
-                    color: Color(0xFFE8EDF5),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700)),
-            SizedBox(height: 16),
-            CircularProgressIndicator(color: Color(0xFF00D4FF), strokeWidth: 2),
+            const SentinelCore(size: 190, color: AppColors.cyan, icon: Icons.lock_rounded),
+            const SizedBox(height: 34),
+            const Text(
+              'AI Smart Cupboard',
+              style: TextStyle(
+                color: AppColors.textHi,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'INITIALIZING SECURE SESSION',
+              style: TextStyle(
+                color: AppColors.textLo,
+                fontFamily: kMono,
+                fontSize: 11,
+                letterSpacing: 2.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -106,43 +120,85 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
-  static const _bg           = Color(0xFF0A0E1A);
-  static const _surface      = Color(0xFF111827);
-  static const _border       = Color(0xFF2A3550);
-  static const _cyan         = Color(0xFF00D4FF);
-  static const _textSecondary = Color(0xFF6B7A99);
-
   final List<Widget> _screens = const [
     DashboardScreen(),
     LogsScreen(),
     ProfileScreen(),
   ];
 
+  static const _tabs = [
+    (Icons.shield_outlined, Icons.shield_rounded, 'Home'),
+    (Icons.list_alt_outlined, Icons.list_alt_rounded, 'Logs'),
+    (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: AppColors.bg,
       body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: _surface,
-          border: Border(top: BorderSide(color: _border, width: 1)),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF141A28), AppColors.surface],
+          ),
+          border: Border(top: BorderSide(color: AppColors.line, width: 1)),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (i) => setState(() => _selectedIndex = i),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          selectedItemColor: _cyan,
-          unselectedItemColor: _textSecondary,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.shield_outlined), activeIcon: Icon(Icons.shield_rounded), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.list_alt_outlined), activeIcon: Icon(Icons.list_alt_rounded), label: 'Logs'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), activeIcon: Icon(Icons.person_rounded), label: 'Profile'),
-          ],
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(_tabs.length, (i) {
+                final selected = i == _selectedIndex;
+                final (outline, filled, label) = _tabs[i];
+                return Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _selectedIndex = i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOut,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: selected ? AppColors.cyan.withOpacity(0.10) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: selected ? AppColors.cyan.withOpacity(0.35) : Colors.transparent,
+                        ),
+                        boxShadow: selected
+                            ? [BoxShadow(color: AppColors.cyan.withOpacity(0.18), blurRadius: 16, spreadRadius: -4)]
+                            : null,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            selected ? filled : outline,
+                            color: selected ? AppColors.cyan : AppColors.textLo,
+                            size: 22,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              color: selected ? AppColors.cyan : AppColors.textLo,
+                              fontSize: 11,
+                              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
         ),
       ),
     );

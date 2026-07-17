@@ -12,7 +12,7 @@ import sys
 import uuid
 import hashlib
 import jwt
-import random
+import secrets
 import time
 
 # Windows' console defaults to cp1252, which can't encode the emoji used in
@@ -72,8 +72,10 @@ VISITORS_FOLDER      = UPLOAD_FOLDER
 DB_PATH              = DATABASE_FILE
 LATEST_VISITOR_IMAGE = ""
 
-# In-memory OTP store: { phone: { otp, expires_at } }
+# In-memory OTP store: { phone: { otp, expires_at, attempts, sent_at } }
 otp_store = {}
+OTP_RESEND_COOLDOWN = 30   # seconds between OTP requests for the same phone
+OTP_MAX_ATTEMPTS    = 5    # wrong guesses allowed before the OTP is invalidated
 
 # ==========================================
 # DATABASE
@@ -329,11 +331,24 @@ def send_otp():
         if not phone:
             return jsonify({"success": False, "message": "Phone number required"})
 
-        # Generate 6-digit OTP
-        otp = str(random.randint(100000, 999999))
+        # Server-side resend cooldown — a client-side timer alone can be
+        # bypassed by just calling the API directly, letting someone spam
+        # SMS sends or hammer a fresh OTP for guessing attempts.
+        existing = otp_store.get(phone)
+        if existing:
+            elapsed = time.time() - existing["sent_at"]
+            if elapsed < OTP_RESEND_COOLDOWN:
+                wait = int(OTP_RESEND_COOLDOWN - elapsed)
+                return jsonify({"success": False, "message": f"Please wait {wait}s before requesting another OTP"})
+
+        # secrets.randbelow is a CSPRNG — random.randint is predictable and
+        # unsuitable for anything auth-related.
+        otp = str(secrets.randbelow(900000) + 100000)
         otp_store[phone] = {
             "otp":        otp,
-            "expires_at": time.time() + 300  # 5 minutes
+            "expires_at": time.time() + 300,  # 5 minutes
+            "sent_at":    time.time(),
+            "attempts":   0,
         }
 
         print(f"\n📱 OTP for {phone}: {otp}\n")
@@ -381,7 +396,12 @@ def verify_otp():
             del otp_store[phone]
             return jsonify({"success": False, "message": "OTP expired. Request a new one."})
         if stored["otp"] != otp:
-            return jsonify({"success": False, "message": "Incorrect OTP. Try again."})
+            stored["attempts"] += 1
+            if stored["attempts"] >= OTP_MAX_ATTEMPTS:
+                del otp_store[phone]
+                return jsonify({"success": False, "message": "Too many incorrect attempts. Request a new OTP."})
+            left = OTP_MAX_ATTEMPTS - stored["attempts"]
+            return jsonify({"success": False, "message": f"Incorrect OTP. {left} attempt{'s' if left != 1 else ''} left."})
 
         del otp_store[phone]
 
@@ -611,6 +631,20 @@ def visitor_image():
 @require_auth
 def get_image(filename):
     return send_from_directory(VISITORS_FOLDER, filename)
+
+@app.route("/image/<filename>", methods=["DELETE"])
+@require_auth
+def delete_image(filename):
+    try:
+        safe_name = os.path.basename(filename)
+        file_path = os.path.join(VISITORS_FOLDER, safe_name)
+        if not os.path.exists(file_path):
+            return jsonify({"success": False, "message": "File not found"})
+        os.remove(file_path)
+        add_system_event(f"Gallery image deleted: {safe_name}")
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
 
 @app.route("/images")
 @require_auth
